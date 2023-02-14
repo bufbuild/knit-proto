@@ -1,0 +1,339 @@
+syntax = "proto3";
+
+package buf.knit.gateway.v1alpha1;
+
+import "google/protobuf/struct.proto";
+
+// The top level request definition.
+//
+// It contains an entry point method to be executed along with
+// a mask for the fields to include. The mask fields can include
+// the relationships that should be recursively fetched.
+message Request {
+  // Fully qualified method name.
+  //
+  // Eg: pets.v1.PetService.GetPet.
+  string method = 1;
+  // The request body.
+  //
+  // The value is the JSON-encoding of the request message for the named RPC method.
+  //
+  // This format is used so that the JSON form of this message includes the request
+  // body naturally, instead of being obfuscated in a string or bytes field. This
+  // makes a browser's network inspector much more useful.
+  //
+  // We rely on JSON, instead of tag numbers and Protobuf's normal binary encoding,
+  // to enable a client that does not need any runtime code for translating Knit
+  // queries into these Protobuf requests. Knit is powered largely by TypeScript
+  // types, so it has minimal overhead in terms of transpiled JS bundles.
+  google.protobuf.Value body = 2;
+  // The field mask that should be applied to the response.
+  repeated MaskField mask = 3;
+  // The error handling strategy. The default strategy varies by RPC method.
+  oneof on_error {
+    // Catch indicates that errors should be caught and returned as part of the response.
+    Catch catch = 4;
+    // Throw indicates that errors should be thrown, so that the entire Knit operation
+    // fails and returns no data.
+    Throw throw = 5;
+  }
+}
+
+// MaskField describes a requested field. This also includes Knit relation fields.
+//
+// If the requested field is a Knit relation field, the `params` field can be used to pass
+// parameters to the relation field.
+//
+// If the requested field is a message type, the `mask` field can be used to specify the fields
+// that should be included.
+message MaskField {
+  // The name of the field. This is the CamelCase name (aka default JSON name) of
+  // the field or relation.
+  string name = 1;
+  // Params for Knit relation fields.
+  //
+  // It should only be present for relation fields that are computed via joining
+  // a response with other RPC responses. The value is the JSON-encoding of
+  // the relation's request message type, but *without* the `bases` field (which
+  // is populated by a Knit gateway, not by the Knit query). The JSON value is
+  // encoded as a google.protobuf.Value (which can model arbitrary JSON data).
+  //
+  // See [Request.body] for more information about wny this format is used.
+  google.protobuf.Value params = 2;
+  // The mask to be applied to this field.
+  //
+  // It should only be set for fields that are one of the following:
+  // - Message types.
+  // - Repeated message types.
+  // - Map types with message values.
+  repeated MaskField mask = 3;
+  // The error handling strategy. The default and allowed value varies by RPC method.
+  //
+  // It should only be present for relation fields that are computed via joining
+  // a response with other RPC responses.
+  oneof on_error {
+    // Catch indicates that errors should be caught and returned as part of the response.
+    Catch catch = 4;
+    // Throw indicates that errors should be thrown and not returned as part of the response.
+    //
+    // This bubbles up the error to the top level response until it sees a catch. If there
+    // is no catch in the query, and the default error handling strategy is not catch, this
+    // results in the Knit operation failing and returning no data.
+    Throw throw = 5;
+  }
+}
+
+// Response is the aggregated response of executing a `Request`.
+message Response {
+  // Fully qualified method name.
+  //
+  // Eg: pets.v1.PetService.GetPet.
+  string method = 1;
+  // The response body. It includes the fetched relations.
+  //
+  // The value is the JSON-encoding of the RPC response, but with fetched relations
+  // merged in. So relations are serialized as if they were defined in the base message.
+  //
+  // Errors are JSON-encoded form of `Error` with a special `[@error]` field that is
+  // used to indicate that part of the response is an error instead of the type indicated
+  // in the corresponding schema. The `[@error]` field is an empty struct that marks the
+  // containing struct as an error. This can happen whenever an error is caught either
+  // because of an `on_error: catch` or because the default error handling strategy is
+  // `catch` (such as for "Do" operations).
+  google.protobuf.Value body = 2;
+  // Schema is the complete schema of the response including relations. This is required
+  // by Knit clients that do not have runtime type information. Without runtime type
+  // information, this schema is needed to process the response body. TS/JS Knit clients
+  // do not have runtime type information in order to reduce JS bundles sizes.
+  Schema schema = 3;
+}
+
+// Schema describes the schema of a protobuf message. This is mostly a subset of the
+// corresponding descriptors for the response message. It is drastically smaller and has
+// only what the client needs. But it also includes information about relation fields
+// that have been joined into the response (which would not be part of the response
+// message's descriptors).
+message Schema {
+  // Field holds the type information for a field. It also includes Knit relation fields.
+  message Field {
+    message Type {
+      enum ScalarType {
+        SCALAR_TYPE_UNSPECIFIED = 0;
+        SCALAR_TYPE_ENUM = 1;
+        SCALAR_TYPE_INT32 = 2;
+        SCALAR_TYPE_UINT32 = 3;
+        SCALAR_TYPE_INT64 = 4;
+        SCALAR_TYPE_UINT64 = 5;
+        SCALAR_TYPE_FLOAT = 6;
+        SCALAR_TYPE_DOUBLE = 7;
+        SCALAR_TYPE_BOOL = 8;
+        SCALAR_TYPE_STRING = 9;
+        SCALAR_TYPE_BYTES = 10;
+        SCALAR_TYPE_NULL = 11; // reserved for google.protobuf.NullValue
+      }
+      message MapType {
+        // The kind of the map key. Limited to:
+        // SCALAR_TYPE_INT32, SCALAR_TYPE_UINT32,
+        // SCALAR_TYPE_INT64, SCALAR_TYPE_UINT64,
+        // SCALAR_TYPE_BOOL, SCALAR_TYPE_STRING
+        ScalarType key = 1;
+        // The kind of the map value.
+        oneof value {
+          // The schema of the message map value.
+          Schema message = 2;
+          // The primitive type of the map value.
+          ScalarType scalar = 3;
+        }
+      }
+      // RepeatedType holds the type information for a repeated field.
+      message RepeatedType {
+        oneof element {
+          // The schema of the message element.
+          Schema message = 1;
+          // The primitive type of the repeated element.
+          ScalarType scalar = 2;
+        }
+      }
+      // The type of the field.
+      oneof value {
+        // The schema of the message field.
+        Schema message = 1;
+        // The primitive type of the field.
+        ScalarType scalar = 2;
+        // The schema of the repeated field.
+        RepeatedType repeated = 3;
+        // The schema of the map field.
+        MapType map = 4;
+      }
+    }
+    // The localCamelCase form of the field name. This is also the field's
+    // default JSON name. Importantly: this is not necessarily the field
+    // name as it appears in the proto source file.
+    string name = 1;
+    // The JSON name of the field. This is only set if it differs from name.
+    string json_name = 2;
+    // The type of this field.
+    Type type = 3;
+  }
+  // Fully qualified message name.
+  //
+  // Eg: pets.v1.Pet, google.protobuf.Any
+  string name = 1;
+  // The list of fields.
+  //
+  // Fields are not populated for WKTs that have a custom JSON format:
+  //  * google.protobuf.Any
+  //  * google.protobuf.Timestamp, google.protobuf.Duration
+  //  * google.protobuf.BoolValue
+  //  * google.protobuf.Int32Value, google.protobuf.Int64Value
+  //  * google.protobuf.Uint32Value, google.protobuf.Uint32Value
+  //  * google.protobuf.FloatValue, google.protobuf.DoubleValue
+  //  * google.protobuf.StringValue, google.protobuf.BytesValue
+  //  * google.protobuf.Value, google.protobuf.ListValue, google.protobuf.Struct
+  //  * google.protobuf.FieldMask
+  repeated Field fields = 2;
+}
+
+// Error is the error representation used by a Knit gateway for errors that
+// are caught (because of an `on_error: catch` in the request) and rendered
+// into the response body.
+message Error {
+  message Detail {
+    // The fully qualified message name.
+    string type = 1;
+    // The protobuf encoded message.
+    bytes value = 2;
+    // Optional json encoded form of value.
+    google.protobuf.Value debug = 3;
+  }
+  // The canonical error codes for Connect and gRPC APIs.
+  //
+  // Based on https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto.
+  // We rename `OK` to `UNSPECIFIED` and `CANCELLED` to `CANCELED`
+  // buf:lint:ignore ENUM_VALUE_PREFIX
+  // buf:lint:ignore ENUM_ZERO_VALUE_SUFFIX
+  enum Code {
+    UNSPECIFIED = 0;
+    CANCELED = 1;
+    UNKNOWN = 2;
+    INVALID_ARGUMENT = 3;
+    DEADLINE_EXCEEDED = 4;
+    NOT_FOUND = 5;
+    ALREADY_EXISTS = 6;
+    PERMISSION_DENIED = 7;
+    RESOURCE_EXHAUSTED = 8;
+    FAILED_PRECONDITION = 9;
+    ABORTED = 10;
+    OUT_OF_RANGE = 11;
+    UNIMPLEMENTED = 12;
+    INTERNAL = 13;
+    UNAVAILABLE = 14;
+    DATA_LOSS = 15;
+    UNAUTHENTICATED = 16;
+  }
+  // The error code.
+  Code code = 1;
+  // The error message.
+  string message = 2;
+  // The error details if any.
+  repeated Detail details = 3;
+  // The dot separated path to the field that caused the error.
+  //
+  // Eg: foo.v1.FooService.getFoo.foo.bars
+  string path = 4;
+}
+
+// Catch is one of the error handling strategies.
+//
+// It tells the KnitService to catch the error and return it as part of the response.
+message Catch {
+  // This is a message because we may want to add fields in the future, to give
+  // users even finer-grained control over handling.
+}
+
+// Throw is one of the error handling strategies.
+//
+// It tells the KnitService to propagate the error up the query chain.
+message Throw {
+  // This is a message because we may want to add fields in the future, to give
+  // users even finer-grained control over handling.
+}
+
+// KnitService exposes methods that, based on a sequence of requests, return an
+// aggregated sequence of responses.
+//
+// In addition to batching of requests, aggregation can include additional attributes
+// based on predefined relations.
+//
+// All methods are functionally similar but differ in semantics. All of them
+// accept `Request` values and return `Response` values.
+service KnitService {
+  // Fetch is used to query methods that have no side effects (Get, List, Search).
+  //
+  // Only methods marked with the `idempotency_level` option `NO_SIDE_EFFECTS`
+  // can be used with Fetch.
+  //
+  // If an error occurs during fetching an relation the entire request fails. In such cases it
+  // returns the upstream error.
+  //
+  // `Fetch` can be cached.
+  //
+  // The default error handling strategy is `Throw`.
+  rpc Fetch(FetchRequest) returns (FetchResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Do is used to perform operations that may have side effects (CRUD operations: Create, Replace, Update, Delete).
+  //
+  // Methods that are NOT marked with the `idempotency_level` option `NO_SIDE_EFFECTS`
+  // can be used with `Do`.
+  //
+  // If an error occurs during fetching an relation the entire request fails. In such cases it returns
+  // the upstream error.
+  //
+  // `Do` should NOT be cached.
+  //
+  // The default error handling strategy is `Catch`.
+  rpc Do(DoRequest) returns (DoResponse);
+  // Listen is used to subscribe to server-only streaming methods.
+  //
+  // The stream is closed when upstream closes or on first error encountered. Errors can occur
+  // while fetching relations.
+  //
+  // It is similar to `Fetch` but instead of returning a single response, it returns a stream of
+  // responses. The `schema` field of the response will be present in the first response
+  // message in the stream. All subsequent messages will skip the schema.
+  //
+  // The default error handling strategy is `Throw`. An error at the entry point will close the
+  // stream.
+  rpc Listen(ListenRequest) returns (stream ListenResponse);
+}
+
+// The request for the `Fetch` method.
+message FetchRequest {
+  repeated Request requests = 1;
+}
+
+// The response of the `Fetch` method.
+message FetchResponse {
+  repeated Response responses = 1;
+}
+
+// The request for the `Do` method.
+message DoRequest {
+  repeated Request requests = 1;
+}
+
+// The response of the `Do` method.
+message DoResponse {
+  repeated Response responses = 1;
+}
+
+// The request for the `Listen` method.
+message ListenRequest {
+  Request request = 1;
+}
+
+// The response of the `Listen` method.
+message ListenResponse {
+  Response response = 1;
+}
