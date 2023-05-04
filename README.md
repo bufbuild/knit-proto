@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/github/license/bufbuild/knit-api?color=blue)][badges_license]
 [![Slack](https://img.shields.io/badge/slack-buf-%23e01563)][badges_slack]
 
-**Knit brings GraphQL like capabilities to RPCs. Knit has type-safe and
+**Knit brings GraphQL-like capabilities to RPCs. Knit has type-safe and
 declarative queries that shape the response, batching support to eliminate
 the N+1 problem, and first-class support for error handling with partial
 responses. It is built on top of Protobuf and Connect.**
