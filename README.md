@@ -1,6 +1,6 @@
 # 🧶 Knit API
 
-[![License](https://img.shields.io/github/license/bufbuild/knit-api?color=blue)][badges_license]
+[![License](https://img.shields.io/github/license/bufbuild/knit-proto?color=blue)][badges_license]
 [![Slack](https://img.shields.io/badge/slack-buf-%23e01563)][badges_slack]
 
 **Knit brings GraphQL-like capabilities to RPCs. Knit has type-safe and
@@ -267,7 +267,7 @@ Most importantly, this means that masks are not applied to `Any` messages.
 A mask can indicate a special kind of field -- a field name that is
 not actually defined on the message in question. In such cases, the
 mask must also include parameters that are used to _resolve_ the value
-of that field. If the field doesn't require any parameters then they 
+of that field. If the field doesn't require any parameters then they
 can be omitted.
 
 This special kind of field is called a "relation". It often comes up in
@@ -325,7 +325,7 @@ service OrderRelations {
     repeated OrderResult values = 1;
     message OrderResult {
       // This is the field that gets injected into an Order entity.
-      repeated ProductDetails product_details = 1;  
+      repeated ProductDetails product_details = 1;
     }
   }
 }
@@ -383,7 +383,7 @@ Knit is undergoing initial development and is not yet stable.
 
 Offered under the [Apache 2 license][badges_license].
 
-[badges_license]: https://github.com/bufbuild/knit-api/blob/main/LICENSE
+[badges_license]: https://github.com/bufbuild/knit-proto/blob/main/LICENSE
 [badges_slack]: https://buf.build/links/slack
 [knit]: https://github.com/bufbuild/knit
 [tutorial]: https://github.com/bufbuild/knit/tree/main/tutorial

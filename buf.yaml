@@ -1,8 +1,5 @@
 version: v1
 name: buf.build/bufbuild/knit
-breaking:
-  use:
-    - FILE
 lint:
   use:
     - DEFAULT
@@ -11,3 +8,6 @@ lint:
     PACKAGE_VERSION_SUFFIX:
       - buf/knit/knit.proto
       - buf/knit/options.proto
+breaking:
+  use:
+    - FILE
