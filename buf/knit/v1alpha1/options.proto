@@ -4,6 +4,8 @@ package buf.knit.v1alpha1;
 
 import "google/protobuf/descriptor.proto";
 
+option go_package = "buf.build/gen/go/bufbuild/knit/protocolbuffers/go/buf/knit/v1alpha1";
+
 extend google.protobuf.MethodOptions {
   // Configuration for the relation that this method resolves. Should only be
   // present for methods that resolve a Knit relation.

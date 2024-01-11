@@ -4,6 +4,8 @@ package buf.knit.gateway.v1alpha1;
 
 import "google/protobuf/struct.proto";
 
+option go_package = "buf.build/gen/go/bufbuild/knit/protocolbuffers/go/buf/knit/gateway/v1alpha1";
+
 // The top level request definition.
 //
 // It contains an entry point method to be executed along with
